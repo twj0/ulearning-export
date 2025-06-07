@@ -5,8 +5,24 @@ import re
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import datetime # For TeX date
+'''
+2025.06.07
+还在学工程热力学中...
+高考第一天，为什么没人通知我？
+被做局了吧
+'''
 
-# --- Configuration (Use your actual values or leave empty to be prompted) ---
+'''
+使用说明
+0.https://utest.ulearning.cn/?v=1749297514636#/answerHistory?examId=130009，这是工程热力学的第一章章节测试的网页，最起码是我这届，我可以浏览的考试网站链接，不知道大家的网站链接是不是一样的...
+1.浏览器点击F12，打开开发者工具，你可以看到有很多标签，什么元素，控制台，源代码什么的...，切换到Network(网络)标签，刷新页面，在"过滤"搜索utest.ulearning.cn，也不用全部输入，输入二级域名估计都出来了，
+2.https://utestapi.ulearning.cn/exams/user/study/getExamReport?examId=130009&traceId=12463893，找到左边这个，这里面什么都有，包括examId，traceId，authorizationToken，还有其他的一些参数，
+3.自己找吧，眼神好就随便找，眼神不好就多找几遍
+4.其实在“过滤”里面搜索这些参数，也能找到，但是我懒
+5.把这些参数复制到下面的代码中，然后运行，就可以了，
+6.可能会有一些问题，比如？？？，我也不知道，但是我知道这个代码是可以用的
+7.如果有问题，欢迎在issue告诉我，我会（不）尽快回复
+'''
 EXAM_ID = "134539"
 TRACE_ID = "12463893"
 AUTHORIZATION_TOKEN = "74E5048C39689357846C6A33D91DECD6"
@@ -38,15 +54,15 @@ IMAGE_DOWNLOAD_HEADERS = {
 def sanitize_filename(filename):
     if filename is None: filename = "untitled"
     filename = str(filename)
-    # Remove characters that are definitely problematic in Windows/Linux/MacOS
+
     filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    # Replace whitespace sequences with a single underscore
+
     filename = re.sub(r'\s+', '_', filename)
-    # Replace multiple underscores with one
+
     filename = re.sub(r'_+', '_', filename)
-    # Remove leading/trailing underscores
+
     filename = filename.strip('_')
-    return filename[:100] # Limit length
+    return filename[:100] 
 
 
 def get_clean_text_from_html(html_content):
@@ -105,12 +121,12 @@ def extract_image_urls_from_html(html_content):
 
 def download_image(url, save_path, headers):
     try:
-        # print(f"  Downloading image: {url} \n    to: {save_path}") # Reduced verbosity
+
         response = requests.get(url, headers=headers, stream=True, timeout=20)
         response.raise_for_status()
         with open(save_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192): f.write(chunk)
-        # print(f"  Successfully downloaded.") # Reduced verbosity
+
         return True
     except requests.exceptions.Timeout: print(f"  Timeout downloading: {url}")
     except requests.exceptions.HTTPError as e: print(f"  HTTP error {e.response.status_code} for {url}: {e}")
@@ -197,7 +213,7 @@ def process_exam_data(exam_json, base_exam_dir):
                     images_to_process.append((img_url, f"correct_replay_img_{i+1}"))
             downloaded_urls_in_q = set()
             for img_url, filename_prefix in images_to_process:
-                if not img_url.startswith(('http://', 'https://')): continue # Skip invalid
+                if not img_url.startswith(('http://', 'https://')): continue 
                 if img_url in downloaded_urls_in_q: continue
                 parsed_url = urlparse(img_url); original_filename = os.path.basename(parsed_url.path)
                 _, ext = os.path.splitext(original_filename)
@@ -205,11 +221,11 @@ def process_exam_data(exam_json, base_exam_dir):
                 save_filename = f"{filename_prefix}{ext}"; save_path = os.path.join(question_dir, save_filename)
                 if download_image(img_url, save_path, IMAGE_DOWNLOAD_HEADERS): downloaded_urls_in_q.add(img_url)
 
-def generate_markdown_exam(exam_json_data, exam_main_folder_path, md_file_name_full="完整试卷.md"): # Parameter renamed for clarity
-    markdown_output_path = os.path.join(exam_main_folder_path, md_file_name_full) # Use the full name passed
+def generate_markdown_exam(exam_json_data, exam_main_folder_path, md_file_name_full="完整试卷.md"): 
+    markdown_output_path = os.path.join(exam_main_folder_path, md_file_name_full)
     with open(markdown_output_path, 'w', encoding='utf-8') as md_file:
         exam_title = exam_json_data.get("result", {}).get("examTitle", "考试试卷")
-        md_file.write(f"# {exam_title}\n\n") # This is the main title in the MD content
+        md_file.write(f"# {exam_title}\n\n") 
         parts = exam_json_data.get("result", {}).get("part", [])
         for part_idx, part_data in enumerate(parts):
             part_name = part_data.get('partname', f'第 {part_idx + 1} 部分')
@@ -279,7 +295,7 @@ def generate_markdown_exam(exam_json_data, exam_main_folder_path, md_file_name_f
                 md_file.write("---\n\n")
     print(f"Markdown 试卷已生成: {os.path.abspath(markdown_output_path)}")
 
-def generate_tex_exam(exam_json_data, exam_main_folder_path, tex_file_name_full="完整试卷.tex"): # Parameter renamed
+def generate_tex_exam(exam_json_data, exam_main_folder_path, tex_file_name_full="完整试卷.tex"): 
     tex_output_path = os.path.join(exam_main_folder_path, tex_file_name_full) # Use the full name passed
     with open(tex_output_path, 'w', encoding='utf-8') as tex_file:
         tex_file.write(r"\documentclass[12pt]{article}" + "\n")
@@ -386,9 +402,9 @@ def main():
     exam_data = get_exam_report(EXAM_ID, TRACE_ID, AUTHORIZATION_TOKEN, API_HEADERS)
     if not exam_data: print("未能获取考试数据。"); return
 
-    # --- Construct filenames using exam title ---
+
     exam_title_raw = exam_data.get("result", {}).get("examTitle", "UnknownExam")
-    # Sanitize the exam title for use in the main directory name AND file names
+
     sanitized_exam_title_for_folder = sanitize_filename(exam_title_raw) 
     
     current_exam_dir_name = f"exam_{EXAM_ID}_{sanitized_exam_title_for_folder}"
@@ -396,15 +412,13 @@ def main():
     os.makedirs(current_exam_output_dir, exist_ok=True)
     print(f"\n数据将保存到: {current_exam_output_dir}")
 
-    # Process individual questions, images, and text files
     process_exam_data(exam_data, current_exam_output_dir)
     
-    # --- Generate filenames with sanitized exam title prefix ---
-    # We use the same sanitized title as for the folder for consistency in naming files within that folder
+
     md_filename = f"{sanitized_exam_title_for_folder}_完整试卷.md"
     tex_filename = f"{sanitized_exam_title_for_folder}_完整试卷.tex"
 
-    # Generate the aggregate Markdown and TeX files
+
     generate_markdown_exam(exam_data, current_exam_output_dir, md_file_name_full=md_filename)
     generate_tex_exam(exam_data, current_exam_output_dir, tex_file_name_full=tex_filename)
 
