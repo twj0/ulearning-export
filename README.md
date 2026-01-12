@@ -108,7 +108,7 @@ python main.py
 
 ![获取参数](assets/F12打开开发者模式，再点击F5进行刷新，再搜索`token`，随便找到之后点击`负载`。寻找一些需要的值.png)
 
-### 方式二：油猴脚本（推荐）
+### 方式三：油猴脚本（推荐）
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
 2. 新建脚本，粘贴 `js/ulearning-export.user.js` 内容
@@ -118,7 +118,7 @@ python main.py
 
 | 格式 | 说明 |
 |------|------|
-| JSON | 按 `tmpl.jsonc` 模板格式，适合 AI 提示词使用 |
+| JSON | 按 `tmpl.jsonc` 佛脚刷题模板格式 |
 | Markdown | 图文并茂，适合阅读和分享 |
 | TeX | LaTeX 格式，适合高质量排版打印 |
 | 纯文本 | 简单文本格式 |
