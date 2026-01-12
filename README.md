@@ -1,91 +1,141 @@
 # 优学院考试导出工具 (ulearning-export)
 
-这是一个 Python 脚本，用于从优学院 (ulearning.cn) 导出指定考试的题目数据，包括题干、选项、答案、解析中的文本和图片。
-脚本能够将导出的内容整理成独立的题目文件夹，并生成一份包含所有题目图文的 Markdown 文件和一份 TeX 文件，方便用户离线查看、学习或存档。
+从优学院导出考试题目数据，支持标准优学院和东莞理工学院版本。
+
+## 工作原理
+
+### API 接口分析
+
+优学院的考试系统基于前后端分离架构，前端通过 REST API 与后端通信。本工具通过分析浏览器网络请求，找到了关键的数据接口：
+
+```
+GET /exams/user/study/getExamReport?examId={examId}&traceId={userId}
+```
+
+该接口返回完整的考试报告 JSON 数据，包含：
+- 考试基本信息（标题、时间等）
+- 所有题目数据（题干、选项、答案、解析）
+- 题目中嵌入的图片 URL
+
+### 平台差异
+
+| 平台 | API 地址 | 前端地址 |
+|------|----------|----------|
+| 标准优学院 | `utestapi.ulearning.cn` | `utest.ulearning.cn` |
+| 东莞理工学院 | `lms.dgut.edu.cn/utestapi` | `lms.dgut.edu.cn` |
+
+两个平台的 API 结构完全相同，仅域名不同。
+
+### 认证机制
+
+请求需要携带 `Authorization` 请求头，值为登录后获取的 Token。Token 存储在：
+- Cookie: `AUTHORIZATION` 或 `token`
+- 请求头: `authorization`
+
+Token 有时效性，过期后需重新从浏览器获取。
+
+### 数据处理流程
+
+```
+浏览器获取参数 → 调用API获取JSON → 解析题目数据 → 下载图片 → 生成导出文件
+     ↓                                    ↓
+  examId                              题干/选项/答案
+  traceId (userId)                    HTML → 纯文本
+  authorization                       图片URL → 本地文件
+```
 
 ## 功能特点
 
-*   导出考试的完整文本内容（题干、选项、正确答案、解析）。
-*   自动下载题目中嵌入的所有图片，并按题目分类保存。
-*   为每道题目生成独立的文本数据文件 (`question_data.txt`)。
-*   生成包含整个考试内容的 Markdown 文件 (`<考试标题>_完整试卷.md`)，图文并茂。
-*   生成包含整个考试内容的 TeX 文件 (`<考试标题>_完整试卷.tex`)，方便高质量排版。
-*   支持会话刷新尝试，以延长 Token 有效期（基于观察）。
-*   输出的文件夹和文件会根据考试的 `ExamID` 和实际标题自动命名，易于管理。
+- 支持多平台：标准优学院、东莞理工学院优学院
+- 多种导出格式：JSON模板、Markdown、TeX、纯文本
+- 自动下载题目中嵌入的所有图片
+- 提供 Python GUI 程序和油猴浏览器脚本两种使用方式
+- JSON 导出格式兼容 AI 提示词模板
+
+## 项目结构
+
+```
+ulearning-export/
+├── python/                 # Python 版本
+│   ├── main.py            # GUI 主程序
+│   ├── config.py          # 平台配置
+│   ├── api.py             # API 通信
+│   ├── utils.py           # 工具函数
+│   └── exporter.py        # 导出模块
+├── js/
+│   └── ulearning-export.user.js  # 油猴脚本
+└── tmpl.jsonc             # JSON 模板格式说明
+```
 
 ## 环境要求
 
-*   Python 3.x
-*   Python 库:
-    *   `requests`
-    *   `beautifulsoup4`
+- Python 3.x
+- Python 库: `requests`, `beautifulsoup4`
 
-    您可以使用 pip 安装这些依赖：
-    ```bash
-    pip install requests beautifulsoup4
-    ```
-*   **可选**: 如需将 `.tex` 文件编译为 PDF，您需要安装 LaTeX 发行版（如 MiKTeX, TeX Live, MacTeX）。
+```bash
+pip install requests beautifulsoup4
+```
 
 ## 使用方法
 
-1.  **获取必要信息:**
-    您需要从浏览器获取以下三个关键信息：
-    *   **`Exam ID` (考试ID)**
-    *   **`Trace ID` (追踪ID)**
-        *   这两个 ID 通常在浏览器访问特定考试报告时的 URL 中可以找到，或者在开发者工具的网络(Network)请求中找到对 `getExamReport` 接口的调用参数。
-    *   **`Authorization Token` (授权令牌)**
-        *   这个 Token 是身份验证的关键。打开浏览器开发者工具（通常按 F12），切换到“网络”(Network)标签页。
-        *   访问优学院考试页面或已完成的考试报告页面。
-        *   在网络请求列表中，找到一个发往 `utestapi.ulearning.cn` 的请求（例如 `getExamReport` 或 `refresh10Session`）。
-        *   查看该请求的 **请求头 (Request Headers)**，找到名为 `authorization` 的字段，复制其完整的值。**请确保复制的是 `authorization` 字段的值，而不是 Cookie。**
+### 方式一：直接运行 exe（推荐新手）
 
-2.  **配置脚本:**
-    *   克隆或下载本仓库代码。
-    *   打开 `ulearning_export.py` (或其他您保存的脚本名) 文件。
-    *   在脚本的开头部分找到以下配置项，并填入您在步骤1中获取到的信息：
-        ```python
-        EXAM_ID = "你的ExamID"  # 示例: "130009"
-        TRACE_ID = "你的TraceID"  # 示例: "12463893"
-        AUTHORIZATION_TOKEN = "你的AuthorizationToken" # 示例: "74E5048C39689357846C6A33D91DECD6"
-        ```
-    *   您也可以将这些变量留空，脚本运行时会提示您输入。
+下载 `release/优学院导出工具.exe`，双击运行即可，无需安装 Python 环境。
 
-3.  **运行脚本:**
-    *   在终端或命令提示符中，导航到脚本所在的目录。
-    *   运行脚本：
-        ```bash
-        python ulearning_export.py
-        ```
+### 方式二：Python GUI 程序
 
-## 输出说明
+```bash
+cd python
+python main.py
+```
 
-脚本运行成功后，会在脚本同目录下创建一个名为 `ulearning_exports` 的主文件夹。
-在 `ulearning_exports` 内部，会为每次导出的考试创建一个以 `exam_{ExamID}_{考试标题}` 命名的子文件夹。
+在界面中选择平台、填入参数后点击"开始导出"。
 
-该考试文件夹内包含：
+程序支持自动加载 `.env` 文件中的参数，导出成功后会自动保存到 `.env.old` 文件，方便下次使用。
 
-*   **题目子文件夹**: 为每道题目创建的子文件夹，命名格式为 `question_{题目顺序号}_{题目ID}`。这些文件夹内包含：
-    *   该题目中出现的所有图片。
-    *   一个 `question_data.txt` 文件，包含该题目的详细文本信息（题干、选项、答案、解析等）。
-*   **Markdown 试卷**: 一份 Markdown 格式的完整试卷文件，文件名为 `<考试标题>_完整试卷.md`。此文件整合了所有题目的文本和图片（图片为相对路径引用）。
-*   **TeX 试卷**: 一份 TeX 格式的完整试卷文件，文件名为 `<考试标题>_完整试卷.tex`。此文件同样整合了所有题目的文本和图片，可用于生成高质量的 PDF 文档。
+#### 适用场景
+
+本工具适用于优学院考试答案解析页面：
+
+![适用于优学院考试](assets/适用于优学院考试.png)
+
+#### 获取参数步骤
+
+1. 登录优学院，进入考试的"答案解析"页面
+2. 按 F12 打开开发者工具，切换到 Network 标签
+3. 按 F5 刷新页面，搜索 `token`，点击任意请求后查看"负载"选项卡
+4. 找到 `examId`、`traceId`（即 userId）和 `authorization` 值
+
+![获取参数](assets/F12打开开发者模式，再点击F5进行刷新，再搜索`token`，随便找到之后点击`负载`。寻找一些需要的值.png)
+
+### 方式二：油猴脚本（推荐）
+
+1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
+2. 新建脚本，粘贴 `js/ulearning-export.user.js` 内容
+3. 访问优学院考试页面，点击右下角"导出试卷"按钮
+
+## 输出格式
+
+| 格式 | 说明 |
+|------|------|
+| JSON | 按 `tmpl.jsonc` 模板格式，适合 AI 提示词使用 |
+| Markdown | 图文并茂，适合阅读和分享 |
+| TeX | LaTeX 格式，适合高质量排版打印 |
+| 纯文本 | 简单文本格式 |
+
+输出目录结构：
+```
+ulearning_exports/
+└── exam_{ExamID}_{考试标题}/
+    ├── question_1_{题目ID}/
+    │   ├── question_data.txt
+    │   └── *.png (图片)
+    ├── {考试标题}_完整试卷.md
+    └── {考试标题}_完整试卷.tex
+```
 
 ## 注意事项
 
-*   **Token 时效性**: `Authorization Token` 通常具有一定的时效性。如果脚本运行失败并提示认证错误（如 HTTP 401 Unauthorized），您可能需要从浏览器重新获取一个新的 Token 并更新到脚本中。
-*   **API 变化**: 优学院网站的 API 接口 (URL、参数、响应结构等) 可能会发生变化，这可能导致脚本失效。如果遇到问题，请尝试检查浏览器开发者工具中的网络请求，与脚本中的 API 调用进行对比。
-*   **网络问题**: 请确保运行脚本时您的计算机网络连接稳定且可以正常访问优学院的 API 服务器。
-*   **图片相对路径**: 生成的 Markdown 和 TeX 文件中的图片使用的是相对路径。如果您单独移动了这些文件或图片文件夹，图片链接可能会失效。
-*   **文件名特殊字符**: 脚本会尝试清理考试标题中的特殊字符以用作文件名和文件夹名，但仍需注意操作系统对文件名的具体限制。
-*   **频繁请求**: 请勿过于频繁地运行此脚本，以免对优学院服务器造成不必要的负担或触发反爬虫机制。
-
-## 版权与免责声明
-
-*   本脚本仅供个人学习和技术研究使用，旨在方便用户整理和回顾已完成的优学院考试内容。
-*   请勿将本脚本用于任何商业用途或侵犯优学院及相关权利方权益的行为。
-*   用户应自行承担使用本脚本可能带来的所有风险。开发者不对因使用本脚本造成的任何直接或间接损失负责。
-*   请尊重优学院的用户协议和版权声明。
-
-## 贡献
-
-欢迎提交 Pull Requests 或提出 Issues 改进此工具。
+- Token 有时效性，过期需重新获取
+- 请勿频繁请求，避免触发反爬机制
+- 仅供个人学习使用

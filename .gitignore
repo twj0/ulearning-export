@@ -1,0 +1,12 @@
+dev*/
+ulearning*/
+cookie*
+.claude/
+.env
+.env.old
+
+# python
+__pycache__/
+build/
+dist/
+*.spec
