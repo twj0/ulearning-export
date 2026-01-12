@@ -2,6 +2,7 @@
 """导出模块 - 处理考试数据导出为各种格式"""
 
 import os
+import json
 import datetime
 from utils import sanitize_filename, get_clean_text, extract_images, get_question_type, get_image_ext, escape_latex
 from config import BASE_OUTPUT_DIR
@@ -26,7 +27,8 @@ class ExamExporter:
         # 处理题目和图片
         self._process_questions(result, output_dir)
 
-        # 生成Markdown和TeX
+        # 生成各种格式
+        self._generate_json(exam_data, output_dir, f"{exam_title}_题库.json")
         self._generate_markdown(exam_data, output_dir, f"{exam_title}_完整试卷.md")
         self._generate_tex(exam_data, output_dir, f"{exam_title}_完整试卷.tex")
 
@@ -170,6 +172,59 @@ class ExamExporter:
                     f.write("---\n\n")
 
         self.log(f"Markdown已生成: {path}")
+
+    def _generate_json(self, exam_data, output_dir, filename):
+        """生成JSON模板格式文件"""
+        result = exam_data.get('result', {})
+        path = os.path.join(output_dir, filename)
+        questions = []
+
+        for part in result.get('part', []):
+            for q in part.get('children', []):
+                qtype = q.get('type')
+                correct = q.get('correctAnswerAndReplay', {})
+                answers = correct.get('correctAnswer', [])
+                replay = get_clean_text(correct.get('correctReplay', ''))
+
+                if qtype == 4:  # 判断题
+                    ans = get_clean_text(answers[0]) if answers else ''
+                    questions.append({
+                        "题型": "判断题",
+                        "题干": get_clean_text(q.get('title', '')),
+                        "答案": "正确" if '正确' in ans or '对' in ans or ans == 'A' else "错误",
+                        "解析": replay
+                    })
+                elif qtype == 5:  # 填空题/简答题
+                    ans_texts = [get_clean_text(a) for a in answers if get_clean_text(a)]
+                    questions.append({
+                        "题型": "填空题",
+                        "题干": get_clean_text(q.get('title', '')),
+                        "答案": '}{'.join(ans_texts) if ans_texts else "(见参考答案图片)",
+                        "解析": replay
+                    })
+                elif qtype in (1, 2, 3):  # 选择题
+                    items = q.get('item', [])
+                    ans_texts = [get_clean_text(a) for a in answers if get_clean_text(a)]
+                    questions.append({
+                        "题型": "选择题",
+                        "题干": get_clean_text(q.get('title', '')),
+                        "选项": [get_clean_text(item.get('title', '')) for item in items],
+                        "答案": ''.join(ans_texts),
+                        "解析": replay
+                    })
+                else:  # 问答题
+                    ans_texts = [get_clean_text(a) for a in answers if get_clean_text(a)]
+                    questions.append({
+                        "题型": "问答题",
+                        "题干": get_clean_text(q.get('title', '')),
+                        "答案": '\n'.join(ans_texts) if ans_texts else "(见参考答案图片)",
+                        "解析": replay
+                    })
+
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(questions, f, ensure_ascii=False, indent=2)
+
+        self.log(f"JSON已生成: {path}")
 
     def _generate_tex(self, exam_data, output_dir, filename):
         """生成TeX文件"""

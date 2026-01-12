@@ -8,6 +8,7 @@ from tkinter import ttk, scrolledtext, messagebox
 import threading
 import queue
 import os
+import webbrowser
 
 from config import PLATFORMS, DEFAULT_PLATFORM
 from api import UlearningAPI
@@ -43,13 +44,29 @@ def save_env_old(exam_id, trace_id, token):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("优学习导出工具")
+        root.title("优学院导出工具")
         root.geometry("750x650")
         self.msg_queue = queue.Queue()
 
+        self._create_menu()
         self._create_ui()
-        self._load_env_data()  # 加载 .env 数据
+        self._load_env_data()
         self.root.after(100, self._process_queue)
+
+    def _create_menu(self):
+        """创建菜单栏"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="仓库地址", menu=help_menu)
+        help_menu.add_command(label="GitHub 仓库", command=lambda: webbrowser.open("https://github.com/twj0/ulearning-export"))
+        help_menu.add_separator()
+        help_menu.add_command(label="关于", command=self._show_about)
+
+    def _show_about(self):
+        """显示关于对话框"""
+        messagebox.showinfo("关于", "优学院导出工具 \n\n作者: twj0\nGitHub: github.com/twj0/ulearning-export")
 
     def _load_env_data(self):
         """从 .env 文件加载数据到输入框"""
