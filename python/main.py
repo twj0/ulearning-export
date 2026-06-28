@@ -12,7 +12,8 @@ import webbrowser
 
 from config import PLATFORMS, DEFAULT_PLATFORM
 from api import UlearningAPI
-from exporter import ExamExporter
+from exam_report_exporter import ExamReportExporter
+from student_paper_exporter import StudentPaperExporter
 
 # .env 文件路径（项目根目录）
 ENV_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
@@ -110,6 +111,12 @@ class App:
         btn_frame = ttk.Frame(self.root, padding=10)
         btn_frame.pack(fill="x")
 
+        ttk.Label(btn_frame, text="导出模式:").pack(side="left", padx=5)
+        self.flow_var = tk.StringVar(value="auto")
+        ttk.Radiobutton(btn_frame, text="自动", variable=self.flow_var, value="auto").pack(side="left")
+        ttk.Radiobutton(btn_frame, text="标准答案", variable=self.flow_var, value="report").pack(side="left")
+        ttk.Radiobutton(btn_frame, text="用户答案", variable=self.flow_var, value="paper").pack(side="left", padx=(0, 10))
+
         self.export_btn = ttk.Button(btn_frame, text="开始导出", command=self._start_export)
         self.export_btn.pack(side="left", padx=5)
 
@@ -162,14 +169,25 @@ class App:
             self._log(f"使用平台: {PLATFORMS[platform]['name']}")
 
             api = UlearningAPI(platform, token)
-            exporter = ExamExporter(api, self._log)
+            mode = self.flow_var.get()
+            output_dir = None
 
-            exam_data = api.get_exam_report(exam_id, trace_id, self._log)
-            if exam_data:
-                output_dir = exporter.export(exam_data, exam_id)
-                if output_dir:
-                    save_env_old(exam_id, trace_id, token)  # 保存到 .env.old
-                    self._log(f"\n导出完成! 保存位置: {output_dir}")
+            if mode in ("auto", "report"):
+                self._log("尝试标准答案流程: getExamReport")
+                exporter = ExamReportExporter(api, self._log)
+                exam_data = api.get_exam_report(exam_id, trace_id, self._log)
+                if exam_data and exam_data.get('result'):
+                    output_dir = exporter.export(exam_data, exam_id)
+
+            if not output_dir and mode in ("auto", "paper"):
+                if mode == "auto":
+                    self._log("标准答案流程不可用，切换用户答案流程")
+                exporter = StudentPaperExporter(api, self._log)
+                output_dir = exporter.export(exam_id, trace_id, token)
+
+            if output_dir:
+                save_env_old(exam_id, trace_id, token)
+                self._log(f"\n导出完成! 保存位置: {output_dir}")
             else:
                 self._log("获取考试数据失败")
         except Exception as e:
@@ -184,7 +202,7 @@ class App:
 
 2. 按F12打开开发者工具，切换到Network(网络)选项卡
 
-3. 刷新页面，找到名为"getExamReport"的请求
+3. 刷新页面，找到名为"getExamReport"或"openPaper"的请求
 
 4. 在请求中找到以下信息:
    - URL中的 examId 和 traceId 参数
@@ -196,7 +214,8 @@ class App:
 
 注意:
 - Token需要定期更新
-- traceId是用户的唯一ID"""
+- traceId是用户的唯一ID
+- 自动模式会优先导出标准答案，失败后导出用户答案"""
 
         win = tk.Toplevel(self.root)
         win.title("使用帮助")

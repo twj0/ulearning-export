@@ -15,8 +15,51 @@ class UlearningAPI:
         self.auth_token = token
         self.headers["authorization"] = token
 
+    def open_paper(self, exam_id, trace_id, log_func=print):
+        """打开考试，获取试卷信息和paperId"""
+        url = (f"{self.platform['api_base']}/exams/user/study/openPaper"
+               f"?examId={exam_id}&fromWhere=org&startTime=&endTime=&ip=&token=&submitType=&mode=1"
+               f"&isLockScreen=false&traceId={trace_id}")
+        log_func(f"正在打开考试: examId={exam_id}...")
+
+        try:
+            response = requests.get(url, headers=self.headers, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log_func(f"打开考试失败: {e}")
+        return None
+
+    def get_paper_for_student(self, paper_id, exam_id, exam_user_id, trace_id, log_func=print):
+        """获取学生试卷内容（题目列表，不含答案）"""
+        url = (f"{self.platform['api_base']}/exams/user/study/getPaperForStudent"
+               f"?paperId={paper_id}&examId={exam_id}&examUserId={exam_user_id}&traceId={trace_id}")
+        log_func(f"正在获取试卷内容: paperId={paper_id}...")
+
+        try:
+            response = requests.get(url, headers=self.headers, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log_func(f"获取试卷失败: {e}")
+        return None
+
+    def get_the_last_answer(self, auto_saved_key, exam_user_id, trace_id, log_func=print):
+        """获取用户最后保存的答案"""
+        url = (f"{self.platform['api_base']}/exams/learner/getTheLastAnswer"
+               f"?autoSavedKey={auto_saved_key}&examUserId={exam_user_id}&traceId={trace_id}")
+        log_func(f"正在获取已保存答案...")
+
+        try:
+            response = requests.get(url, headers=self.headers, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log_func(f"获取答案失败: {e}")
+        return None
+
     def get_exam_report(self, exam_id, trace_id, log_func=print):
-        """获取考试报告数据"""
+        """获取考试报告数据（旧API，已评分的考试可用）"""
         url = f"{self.platform['api_base']}/exams/user/study/getExamReport?examId={exam_id}&traceId={trace_id}"
         log_func(f"正在获取考试报告: examId={exam_id}, traceId={trace_id}...")
 

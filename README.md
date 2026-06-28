@@ -61,7 +61,8 @@ ulearning-export/
 │   ├── config.py          # 平台配置
 │   ├── api.py             # API 通信
 │   ├── utils.py           # 工具函数
-│   └── exporter.py        # 导出模块
+│   ├── exam_report_exporter.py    # 标准答案报告导出
+│   └── student_paper_exporter.py  # 学生试卷/用户答案导出
 ├── js/
 │   └── ulearning-export.user.js  # 油猴脚本
 └── tmpl.jsonc             # JSON 模板格式说明
@@ -130,8 +131,9 @@ ulearning_exports/
     ├── question_1_{题目ID}/
     │   ├── question_data.txt
     │   └── *.png (图片)
-    ├── {考试标题}_完整试卷.md
-    └── {考试标题}_完整试卷.tex
+    ├── {考试标题}_标准答案题库.json
+    ├── {考试标题}_标准答案完整试卷.md
+    └── {考试标题}_标准答案完整试卷.tex
 ```
 
 ## 注意事项

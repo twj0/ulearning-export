@@ -67,7 +67,7 @@
         return null;
     }
 
-    // 获取考试报告
+    // 获取考试报告(旧API)
     async function fetchExamReport(examId, traceId, authToken) {
         const url = `${API_BASE}/exams/user/study/getExamReport?examId=${examId}&traceId=${traceId}`;
         const response = await fetch(url, {
@@ -78,6 +78,78 @@
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
+    }
+
+    // 新API：打开考试
+    async function openPaper(examId, traceId, authToken) {
+        const url = `${API_BASE}/exams/user/study/openPaper?examId=${examId}&fromWhere=org&startTime=&endTime=&ip=&token=&submitType=&mode=1&isLockScreen=false&traceId=${traceId}`;
+        const response = await fetch(url, {
+            headers: {
+                'authorization': authToken,
+                'accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    }
+
+    // 新API：获取试卷题目
+    async function getPaperForStudent(paperId, examId, examUserId, traceId, authToken) {
+        const url = `${API_BASE}/exams/user/study/getPaperForStudent?paperId=${paperId}&examId=${examId}&examUserId=${examUserId}&traceId=${traceId}`;
+        const response = await fetch(url, {
+            headers: {
+                'authorization': authToken,
+                'accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    }
+
+    // 新API：获取已保存答案
+    async function getTheLastAnswer(autoSavedKey, examUserId, traceId, authToken) {
+        const url = `${API_BASE}/exams/learner/getTheLastAnswer?autoSavedKey=${autoSavedKey}&examUserId=${examUserId}&traceId=${traceId}`;
+        const response = await fetch(url, {
+            headers: {
+                'authorization': authToken,
+                'accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    }
+
+    // 格式化为Markdown (用户答案试卷 - 无标准答案)
+    function formatMarkdownNew(examResult, userAnswers) {
+        let md = `# ${examResult.examTitle || '考试'}\n\n`;
+
+        for (const part of (examResult.part || [])) {
+            md += `## ${part.partname || '部分'}\n\n`;
+
+            for (const q of (part.children || [])) {
+                const order = q.orderIndex || 0;
+                const qtype = QUESTION_TYPES[q.type] || '未知题型';
+                const qid = String(q.questionid || '');
+                const ua = userAnswers[qid] || [];
+
+                md += `### ${order}. (${qtype})\n\n`;
+                md += `**题干:** ${htmlToText(q.title)}\n\n`;
+
+                const items = q.item || [];
+                if (items.length > 0) {
+                    md += '**选项:**\n';
+                    for (const item of items) {
+                        md += `- ${htmlToText(item.title)}\n`;
+                    }
+                    md += '\n';
+                }
+
+                const uaText = ua.map(a => htmlToText(a)).filter(t => t).join('; ');
+                md += `**你的答案:** ${uaText || '(未作答)'}\n\n`;
+                md += '---\n\n';
+            }
+        }
+        return md;
     }
 
     // 格式化为Markdown
@@ -215,6 +287,33 @@
         return JSON.stringify(questions, null, 2);
     }
 
+    // 提取题目（用户答案试卷 - 无标准答案）
+    function extractQuestionsNew(result, userAnswers) {
+        const questions = [];
+
+        for (const part of (result.part || [])) {
+            for (const q of (part.children || [])) {
+                const qtype = q.type;
+                const qid = String(q.questionid || '');
+                const ua = userAnswers[qid] || [];
+                const uaJoined = ua.map(a => htmlToText(a)).filter(t => t).join('; ');
+
+                const base = {
+                    "题型": QUESTION_TYPES[qtype] || '未知题型',
+                    "题干": htmlToText(q.title),
+                    "用户答案": uaJoined || '(未作答)',
+                };
+
+                if (qtype >= 1 && qtype <= 3) {
+                    base["选项"] = (q.item || []).map(item => htmlToText(item.title));
+                }
+
+                questions.push(base);
+            }
+        }
+        return questions;
+    }
+
     // 下载文件
     function downloadFile(content, filename) {
         const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -281,8 +380,10 @@
                     <div style="margin-bottom:16px;">
                         <label style="display:block;margin-bottom:4px;">导出格式:</label>
                         <select id="export-format" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
-                            <option value="json">JSON 模板格式 (.json)</option>
-                            <option value="markdown">Markdown (.md)</option>
+                            <option value="json-new">JSON 用户答案试卷</option>
+                            <option value="markdown-new">Markdown 用户答案试卷</option>
+                            <option value="json">JSON 标准答案题库</option>
+                            <option value="markdown">Markdown 标准答案完整试卷</option>
                             <option value="text">纯文本 (.txt)</option>
                             <option value="clipboard">复制到剪贴板 (JSON)</option>
                         </select>
@@ -316,25 +417,61 @@
             status.style.color = '#666';
 
             try {
-                const data = await fetchExamReport(eid, tid, token);
-                if (!data || !data.result) {
-                    throw new Error('数据格式错误');
-                }
+                let data, title, safeTitle;
 
-                const title = data.result.examTitle || 'exam';
-                const safeTitle = title.replace(/[<>:"/\\|?*]/g, '_');
+                if (format === 'json-new' || format === 'markdown-new') {
+                    // 新API流程
+                    status.textContent = '正在打开考试...';
+                    const openData = await openPaper(eid, tid, token);
+                    if (!openData || openData.code !== 1) throw new Error('打开考试失败');
+                    const openResult = openData.result;
+                    const paperId = openResult.paperId;
+                    const examUserId = openResult.examUserId;
+                    title = openResult.exam.title || 'exam';
 
-                if (format === 'json') {
-                    downloadFile(formatJSON(data), `${safeTitle}.json`);
-                } else if (format === 'markdown') {
-                    downloadFile(formatMarkdown(data), `${safeTitle}.md`);
-                } else if (format === 'text') {
-                    downloadFile(formatText(data), `${safeTitle}.txt`);
+                    status.textContent = '正在获取试卷...';
+                    const paperData = await getPaperForStudent(paperId, eid, examUserId, tid, token);
+                    if (!paperData || paperData.code !== 1) throw new Error('获取试卷失败');
+
+                    status.textContent = '正在获取已保存答案...';
+                    let userAnswers = {};
+                    if (openResult.autoSavedKey) {
+                        const ansData = await getTheLastAnswer(openResult.autoSavedKey, examUserId, tid, token);
+                        if (ansData && ansData.code === 1 && ansData.result && Array.isArray(ansData.result.tabs)) {
+                            for (const item of ansData.result.tabs) {
+                                const qid = String(item.ID);
+                                userAnswers[qid] = [item.answer || ''];
+                            }
+                        }
+                    }
+
+                    safeTitle = title.replace(/[<>:"/\\|?*]/g, '_');
+
+                    if (format === 'markdown-new') {
+                        const md = formatMarkdownNew(paperData.result, userAnswers);
+                        downloadFile(md, `${safeTitle}_用户答案试卷.md`);
+                    } else {
+                        const questions = extractQuestionsNew(paperData.result, userAnswers);
+                        downloadFile(JSON.stringify(questions, null, 2), `${safeTitle}_用户答案试卷.json`);
+                    }
                 } else {
-                    GM_setClipboard(formatJSON(data));
-                    status.textContent = '已复制到剪贴板!';
-                    status.style.color = 'green';
-                    return;
+                    data = await fetchExamReport(eid, tid, token);
+                    if (!data || !data.result) throw new Error('数据格式错误');
+                    title = data.result.examTitle || 'exam';
+                    safeTitle = title.replace(/[<>:"/\\|?*]/g, '_');
+
+                    if (format === 'json') {
+                        downloadFile(formatJSON(data), `${safeTitle}_标准答案题库.json`);
+                    } else if (format === 'markdown') {
+                        downloadFile(formatMarkdown(data), `${safeTitle}_标准答案完整试卷.md`);
+                    } else if (format === 'text') {
+                        downloadFile(formatText(data), `${safeTitle}.txt`);
+                    } else {
+                        GM_setClipboard(formatJSON(data));
+                        status.textContent = '已复制到剪贴板!';
+                        status.style.color = 'green';
+                        return;
+                    }
                 }
 
                 status.textContent = '导出成功!';

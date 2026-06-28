@@ -7,13 +7,14 @@ import datetime
 from utils import sanitize_filename, get_clean_text, extract_images, get_question_type, get_image_ext, escape_latex
 from config import BASE_OUTPUT_DIR
 
-class ExamExporter:
+
+class ExamReportExporter:
     def __init__(self, api, log_func=print):
         self.api = api
         self.log = log_func
 
     def export(self, exam_data, exam_id):
-        """导出考试数据"""
+        """导出考试数据（旧格式：考试报告API）"""
         if not exam_data or 'result' not in exam_data:
             self.log("考试数据无效")
             return None
@@ -28,9 +29,9 @@ class ExamExporter:
         self._process_questions(result, output_dir)
 
         # 生成各种格式
-        self._generate_json(exam_data, output_dir, f"{exam_title}_题库.json")
-        self._generate_markdown(exam_data, output_dir, f"{exam_title}_完整试卷.md")
-        self._generate_tex(exam_data, output_dir, f"{exam_title}_完整试卷.tex")
+        self._generate_json(exam_data, output_dir, f"{exam_title}_标准答案题库.json")
+        self._generate_markdown(exam_data, output_dir, f"{exam_title}_标准答案完整试卷.md")
+        self._generate_tex(exam_data, output_dir, f"{exam_title}_标准答案完整试卷.tex")
 
         return output_dir
 
